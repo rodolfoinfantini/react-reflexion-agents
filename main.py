@@ -175,16 +175,23 @@ if __name__ == "__main__":
     pergunta = "Gere uma mensagem de commit seguindo o Conventional Commits baseado nas alterações atuais."
 
     print("="*50)
-    start = time.perf_counter()
+    start_react = time.perf_counter()
     resultado_react, tokens_react, chamadas_react = react_agent(pergunta)
-    end = time.perf_counter()
-    print(f"\n🚀 RESULTADO REACT:\n{resultado_react}")
-    print(f"⏱️ Tempo: {end-start:.1f}s | 🪙 Tokens: {tokens_react} | 📞 Chamadas à API: {chamadas_react}")
+    end_react = time.perf_counter()
+
+    print("\n\n\n")
     print("="*50)
 
-    start = time.perf_counter()
+    start_reflexion = time.perf_counter()
     resultado_reflexion, tokens_reflexion, chamadas_reflexion = reflexion_agent(pergunta)
-    end = time.perf_counter()
+    end_reflexion = time.perf_counter()
+
+
+    print("\n\n\n")
+    print("="*50)
+    print(f"\n🚀 RESULTADO REACT:\n{resultado_react}")
+    print(f"⏱️ Tempo: {end_react-start_react:.1f}s | 🪙 Tokens: {tokens_react} | 📞 Chamadas à API: {chamadas_react}")
+    print("="*50)
     print(f"\n🚀 RESULTADO REFLEXION:\n{resultado_reflexion}")
-    print(f"⏱️ Tempo: {end-start:.1f}s | 🪙 Tokens: {tokens_reflexion} | 📞 Chamadas à API: {chamadas_reflexion}")
+    print(f"⏱️ Tempo: _reflexion{end-s_reflexiontart:.1f}s | 🪙 Tokens: {tokens_reflexion} | 📞 Chamadas à API: {chamadas_reflexion}")
     print("="*50)

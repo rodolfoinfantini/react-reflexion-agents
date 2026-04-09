@@ -1,0 +1,26 @@
+diff --git a/calc.py b/calc.py
+index 3afd87f..6b008af 100644
+--- a/calc.py
++++ b/calc.py
+@@ -1,16 +1,16 @@
+ def somar(a, b):
+-    return a - b
++    return a + b
+ 
+ def subtrair(a, b):
+-    return a + b
++    return a - b
+ 
+ def multiplicar(a, b):
+-    return a ** b
++    return a * b
+ 
+ def dividir(a, b):
+     if b == 0:
+-        return 0
+-    return a // b
++        raise Error("Divisão por zero")
++    return a / b
+ 
+ print(f"2 + 3 = {somar(2, 3)}")
+ print(f"10 - 4 = {subtrair(10, 4)}")

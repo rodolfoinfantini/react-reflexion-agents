@@ -193,5 +193,5 @@ if __name__ == "__main__":
     print(f"⏱️ Tempo: {end_react-start_react:.1f}s | 🪙 Tokens: {tokens_react} | 📞 Chamadas à API: {chamadas_react}")
     print("="*50)
     print(f"\n🚀 RESULTADO REFLEXION:\n{resultado_reflexion}")
-    print(f"⏱️ Tempo: _reflexion{end-s_reflexiontart:.1f}s | 🪙 Tokens: {tokens_reflexion} | 📞 Chamadas à API: {chamadas_reflexion}")
+    print(f"⏱️ Tempo: _reflexion{end_reflexion-start_reflexion:.1f}s | 🪙 Tokens: {tokens_reflexion} | 📞 Chamadas à API: {chamadas_reflexion}")
     print("="*50)

@@ -145,7 +145,7 @@ def reflexion_agent(pergunta):
         2. A descrição está no imperativo (ex: "add login" e não "added login" ou "adicionando login")?
         3. Está conciso?
 
-        Aponte O QUE DEVE SER MELHORADO. Se estiver perfeito, responda apenas "PERFEITO".
+        Aponte O QUE DEVE SER MELHORADO. Se estiver perfeito, responda apenas "PERFEITO" EM CAPS LOCK.
         """
 
         total_chamadas += 1 # Incrementa a chamada da Crítica
@@ -158,7 +158,7 @@ def reflexion_agent(pergunta):
         critica = critica_resposta.choices[0].message.content.strip()
         print(f"      🧐 Crítica interna:\n      {critica}")
 
-        if "PERFEITO" in critica.upper():
+        if "PERFEITO" in critica:
             print("      ✅ O agente concluiu que a resposta está perfeita.")
             resposta_final = draft
             break

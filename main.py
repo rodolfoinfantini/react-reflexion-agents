@@ -72,6 +72,7 @@ def react_agent(pergunta, max_steps=8):
     print("\n🔍 [REACT] Iniciando investigação do repositório...")
 
     for step in range(max_steps):
+        print(f"\n    💻 ReAct - Passo {step + 1}")
         total_chamadas += 1  # Incrementa a chamada
         resposta = client.chat.completions.create(
             model=MODEL,
@@ -83,10 +84,10 @@ def react_agent(pergunta, max_steps=8):
         conteudo = resposta.choices[0].message.content.strip()
         mensagens.append({"role": "assistant", "content": conteudo})
 
-        print(f"   💻 ReAct respondeu: {conteudo}")
+        print(f"        💻 ReAct respondeu: {conteudo}")
 
         if "Resposta Final:" in conteudo:
-            print("   💻 ReAct encontrou a resposta final, retornando")
+            print("        ✅ ReAct encontrou a resposta final, retornando")
             resposta_final = conteudo.split("Resposta Final:")[-1].strip()
             return resposta_final, total_tokens, total_chamadas
 
@@ -96,7 +97,7 @@ def react_agent(pergunta, max_steps=8):
         if acao_match and entrada_match and acao_match.group(1).strip() == "GitCLI":
             comando = entrada_match.group(
                 1).strip().replace('"', '').replace("'", "")
-            print(f"   💻 ReAct executando: {comando}")
+            print(f"        💻 ReAct executando: {comando}")
 
             resultado = run_git_command(comando)
             mensagens.append(
@@ -112,7 +113,7 @@ def react_agent(pergunta, max_steps=8):
 # ==========================================
 
 
-def reflexion_agent(pergunta):
+def reflexion_agent(pergunta, max_attempts=5):
     total_tokens = 0
     total_chamadas = 0  # Inicializa o contador de chamadas
 
@@ -126,7 +127,7 @@ def reflexion_agent(pergunta):
     memoria_criticas = []
     resposta_final = ""
 
-    for tentativa in range(3):
+    for tentativa in range(max_attempts):
         print(f"\n   🔄 Reflexion - Iteração {tentativa + 1}")
 
         # --- PASSO A: GERAÇÃO DO DRAFT ---

@@ -1,104 +1,190 @@
 from openai import OpenAI
 from dotenv import load_dotenv
+import subprocess
 import time
 import os
+import re
 
 load_dotenv()
 
-groq = OpenAI(
+# Configuração do cliente
+client = OpenAI(
     api_key=os.environ['API_KEY'],
     base_url="https://api.groq.com/openai/v1"
 )
 
-# models = groq.models.list()
-# for m in models:
-#     print(m.id)
+MODEL = "llama-3.3-70b-versatile"
 
-def call_model(mensagens):
-  return groq.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=mensagens
+# ==========================================
+# FERRAMENTA COMPARTILHADA
+# ==========================================
+def run_git_command(comando):
+    comandos_proibidos = ["add", "commit", "push", "checkout", "reset", "rebase", "rm", "clean"]
+    if any(proibido in comando for proibido in comandos_proibidos):
+        return f"Acesso negado: Comando bloqueado por segurança."
+
+    if not comando.startswith("git "):
+        return "Erro: Apenas comandos 'git' são permitidos."
+
+    try:
+        resultado = subprocess.run(comando.split(), capture_output=True, text=True, check=True)
+        output = resultado.stdout.strip()
+        if len(output) > 2500:
+            return output[:2500] + "\n... [Saída truncada]"
+        return output if output else "Comando executado sem retorno."
+    except subprocess.CalledProcessError as e:
+        return f"Erro: {e.stderr.strip()}"
+    except Exception as e:
+        return f"Erro: {str(e)}"
+
+# ==========================================
+# 1. AGENTE REACT
+# ==========================================
+REACT_SYSTEM_PROMPT = """Você é um especialista em Git.
+Sua tarefa é gerar uma mensagem no padrão Conventional Commits.
+Você tem a ferramenta 'GitCLI' para investigar o repositório. Entrada: comando git (ex: git status, git diff).
+
+Use EXATAMENTE este formato:
+Pensamento: o que preciso descobrir
+Ação: GitCLI
+Entrada da Ação: comando git
+Observação: [resultado será inserido pelo sistema]
+...
+Pensamento: Tenho o contexto.
+Resposta Final: [mensagem de commit]
+"""
+
+def react_agent(pergunta, max_steps=8):
+    total_tokens = 0
+    total_chamadas = 0 # Inicializa o contador de chamadas
+
+    mensagens = [
+        {"role": "system", "content": REACT_SYSTEM_PROMPT},
+        {"role": "user", "content": pergunta}
+    ]
+
+    print("\n🔍 [REACT] Iniciando investigação do repositório...")
+
+    for step in range(max_steps):
+        total_chamadas += 1 # Incrementa a chamada
+        resposta = client.chat.completions.create(
+            model=MODEL,
+            messages=mensagens,
+            stop=["Observação:"]
         )
 
-def react_agent(pergunta):
-    resposta_final = ""
-    total_tokens_usados = 0
-
-    mensagens = [{"role": "system", "content": "Quebre a pergunta do usuário em 3 passos lógicos. Resolva um passo de cada vez e aguarde o usuário pedir o próximo passo."}]
-    mensagens.append({"role": "user", "content": pergunta})
-
-    for i in range(3):
-        resposta = call_model(mensagens)
-        total_tokens_usados += resposta.usage.total_tokens
-        conteudo = resposta.choices[0].message.content
-
-        print(f"\nPasso {i+1}:\n{conteudo}\n")
-
+        total_tokens += resposta.usage.total_tokens # Soma os tokens
+        conteudo = resposta.choices[0].message.content.strip()
         mensagens.append({"role": "assistant", "content": conteudo})
-        mensagens.append({"role": "user", "content": "Excelente, prossiga para o próximo passo ou dê a conclusão final."})
 
-        resposta_final = conteudo
+        if "Resposta Final:" in conteudo:
+            resposta_final = conteudo.split("Resposta Final:")[-1].strip()
+            return resposta_final, total_tokens, total_chamadas
 
-    return resposta_final, total_tokens_usados
+        acao_match = re.search(r"Ação:\s*(.*)", conteudo)
+        entrada_match = re.search(r"Entrada da Ação:\s*(.*)", conteudo)
 
+        if acao_match and entrada_match and acao_match.group(1).strip() == "GitCLI":
+            comando = entrada_match.group(1).strip().replace('"', '').replace("'", "")
+            print(f"   💻 ReAct executando: {comando}")
+
+            resultado = run_git_command(comando)
+            mensagens.append({"role": "user", "content": f"Observação: {resultado}"})
+        else:
+            mensagens.append({"role": "user", "content": "Observação: Formato inválido."})
+
+    return "Falha: Limite de passos atingido.", total_tokens, total_chamadas
+
+# ==========================================
+# 2. AGENTE REFLEXION
+# ==========================================
 def reflexion_agent(pergunta):
+    total_tokens = 0
+    total_chamadas = 0 # Inicializa o contador de chamadas
+
+    print("\n✍️ [REFLEXION] Coletando contexto para iniciar a escrita...")
+
+    status = run_git_command("git status")
+    diff = run_git_command("git diff")
+    contexto_git = f"STATUS DO REPOSITÓRIO:\n{status}\n\nALTERAÇÕES (DIFF):\n{diff}"
+
+    memoria_criticas = []
     resposta_final = ""
-    total_tokens_usados = 0
-    memoria = []
 
     for tentativa in range(3):
-        print(f"\n====== Tentativa {tentativa+1} ======")
+        print(f"\n   🔄 Reflexion - Iteração {tentativa + 1}")
 
-        mensagens = [{"role": "user", "content": pergunta}]
+        # --- PASSO A: GERAÇÃO DO DRAFT ---
+        mensagens = [
+            {"role": "system", "content": "Você é um especialista em gerar mensagens de Conventional Commits. Responda APENAS com a mensagem de commit, sem explicações extras."},
+            {"role": "user", "content": f"Contexto do código:\n{contexto_git}\n\nPedido do usuário: {pergunta}"}
+        ]
 
-        if memoria:
+        if memoria_criticas:
             mensagens.append({
-                "role": "system",
-                "content": f"Lições aprendidas: {memoria}"
+                "role": "user",
+                "content": f"Baseado nas suas tentativas anteriores, corrija os seguintes defeitos: {memoria_criticas[-1]}"
             })
 
-        resposta = call_model(mensagens)
+        total_chamadas += 1 # Incrementa a chamada do Draft
+        draft_resposta = client.chat.completions.create(model=MODEL, messages=mensagens)
+        total_tokens += draft_resposta.usage.total_tokens # Soma os tokens
 
-        total_tokens_usados += resposta.usage.total_tokens
+        draft = draft_resposta.choices[0].message.content.strip()
+        print(f"      📝 Draft gerado:\n      {draft}")
 
-        conteudo = resposta.choices[0].message.content
-        if not conteudo:
+        # --- PASSO B: CRÍTICA (REFLEXÃO) ---
+        prompt_critica = f"""
+        Você é um revisor de código muito rígido. Avalie o commit abaixo usando a regra Conventional Commits (tipo(escopo opcional): descrição imperativa).
+
+        Commit gerado:
+        {draft}
+
+        Perguntas:
+        1. O tipo (feat, fix, chore, etc) está correto para o código alterado?
+        2. A descrição está no imperativo (ex: "add login" e não "added login" ou "adicionando login")?
+        3. Está conciso?
+
+        Aponte O QUE DEVE SER MELHORADO. Se estiver perfeito, responda apenas "PERFEITO".
+        """
+
+        total_chamadas += 1 # Incrementa a chamada da Crítica
+        critica_resposta = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt_critica}]
+        )
+        total_tokens += critica_resposta.usage.total_tokens # Soma os tokens
+
+        critica = critica_resposta.choices[0].message.content.strip()
+        print(f"      🧐 Crítica interna:\n      {critica}")
+
+        if "PERFEITO" in critica.upper():
+            print("      ✅ O agente concluiu que a resposta está perfeita.")
+            resposta_final = draft
             break
 
-        print("\nResposta:\n", conteudo)
+        memoria_criticas.append(critica)
+        resposta_final = draft
 
+    return resposta_final, total_tokens, total_chamadas
 
-        reflexao = call_model([
-            {"role": "user", "content": f"O que pode melhorar nessa resposta?\n{conteudo}"}
-        ])
-        total_tokens_usados += reflexao.usage.total_tokens
+# ==========================================
+# EXECUÇÃO E COMPARAÇÃO
+# ==========================================
+if __name__ == "__main__":
+    pergunta = "Gere uma mensagem de commit seguindo o Conventional Commits baseado nas alterações atuais."
 
-        insight = reflexao.choices[0].message.content
-        if not insight:
-            break
+    print("="*50)
+    start = time.perf_counter()
+    resultado_react, tokens_react, chamadas_react = react_agent(pergunta)
+    end = time.perf_counter()
+    print(f"\n🚀 RESULTADO REACT:\n{resultado_react}")
+    print(f"⏱️ Tempo: {end-start:.1f}s | 🪙 Tokens: {tokens_react} | 📞 Chamadas à API: {chamadas_react}")
+    print("="*50)
 
-        memoria.append(insight)
-
-        print("\nReflexão:\n", insight)
-
-        resposta_final = conteudo
-
-    return resposta_final, total_tokens_usados
-
-
-
-pergunta = "Pesquise os 3 países com maior PIB da América do Sul, calcule a média do PIB per capita deles, e responda: essa média é maior ou menor que a média mundial?"
-
-print("\n===== REACT =====")
-start = time.perf_counter()
-resposta_react, tokens_react = react_agent(pergunta)
-end = time.perf_counter()
-print(f"\n\nRESPOSTA FINAL:\n{resposta_react}\n\n")
-print(f"Levou: {end - start:0.4f} segundos e usou {tokens_react} tokens")
-
-print("\n===== REFLEXION =====")
-start = time.perf_counter()
-resposta_reflexion, tokens_reflexion = reflexion_agent(pergunta)
-end = time.perf_counter()
-print(f"\n\nRESPOSTA FINAL:\n{resposta_reflexion}\n\n")
-print(f"Levou: {end - start:0.4f} segundos e usou {tokens_reflexion} tokens")
+    start = time.perf_counter()
+    resultado_reflexion, tokens_reflexion, chamadas_reflexion = reflexion_agent(pergunta)
+    end = time.perf_counter()
+    print(f"\n🚀 RESULTADO REFLEXION:\n{resultado_reflexion}")
+    print(f"⏱️ Tempo: {end-start:.1f}s | 🪙 Tokens: {tokens_reflexion} | 📞 Chamadas à API: {chamadas_reflexion}")
+    print("="*50)
